@@ -1200,7 +1200,8 @@ class FishGoalEnv(gym.Env):
         """
         if goals is not None:
             self.goals = np.asarray(goals, dtype=np.float32)
-            self.goal_scatter._offsets3d = (self.goals[:, 0], self.goals[:, 1], self.goals[:, 2])
+            if self.doAnimation:
+                self.goal_scatter._offsets3d = (self.goals[:, 0], self.goals[:, 1], self.goals[:, 2])
 
         if goal_idx is not None:
             goal_idx = np.asarray(goal_idx, dtype=np.int32)

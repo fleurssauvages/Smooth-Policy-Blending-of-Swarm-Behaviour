@@ -18,12 +18,12 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
 
     env = FishBlendEnv(seed=0, do_animation=False, visit_grid_res=24)
-    obs_dim = 7  # from swarm_features.normalize_features()
+    obs_dim = 7
 
     agent = PPOAgent(
         PPOConfig(
             obs_dim=obs_dim,
-            act_dim=3,
+            act_dim=6,   # was 3
             hidden_dim=128,
             lr=3e-4,
             gamma=0.99,
@@ -34,7 +34,7 @@ def main():
             max_grad_norm=0.5,
             update_epochs=10,
             minibatch_size=256,
-            device="cpu",   # set "cuda" if available
+            device="cpu",
         )
     )
 
@@ -48,9 +48,9 @@ def main():
         ep_len = 0
 
         for step in range(rollout_steps):
-            raw_action, blend_weights, log_prob, value = agent.act(obs)
+            raw_action, _, log_prob, value = agent.act(obs)
 
-            next_obs, reward, done, info = env.step(blend_weights)
+            next_obs, reward, done, info = env.step(raw_action)
 
             storage["obs"].append(obs.copy())
             storage["raw_actions"].append(raw_action.copy())
