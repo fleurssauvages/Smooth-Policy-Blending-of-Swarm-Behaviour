@@ -16,12 +16,12 @@ def softmax_np(x: np.ndarray) -> np.ndarray:
 def main():
     checkpoint_path = "checkpoints/ppo_blend_final.pt"
     max_eval_steps = 1200
-    sleep_s = 0.01
+    sleep_s = 0.001
 
     agent = PPOAgent(
         PPOConfig(
             obs_dim=7,
-            act_dim=6,   # 3 blend outputs + 3 relative goal outputs
+            act_dim=3,
             hidden_dim=128,
             device="cpu",
         )
@@ -33,6 +33,7 @@ def main():
         seed=123,
         do_animation=True,
         visit_grid_res=24,
+        layout_name="wall_16",
     )
 
     obs = env.reset(seed=123)
@@ -65,14 +66,6 @@ def main():
     goal_hist = []
     explore_hist = []
 
-    rel_goal_x_hist = []
-    rel_goal_y_hist = []
-    rel_goal_z_hist = []
-
-    local_goal_x_hist = []
-    local_goal_y_hist = []
-    local_goal_z_hist = []
-
     for step in range(max_eval_steps):
         obs_t = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
 
@@ -98,23 +91,11 @@ def main():
         goal_hist.append(w_goal)
         explore_hist.append(w_explore)
 
-        rel_goal_x_hist.append(rel_goal_raw[0])
-        rel_goal_y_hist.append(rel_goal_raw[1])
-        rel_goal_z_hist.append(rel_goal_raw[2])
-
-        local_goal_x_hist.append(info.get("local_goal_x", np.nan))
-        local_goal_y_hist.append(info.get("local_goal_y", np.nan))
-        local_goal_z_hist.append(info.get("local_goal_z", np.nan))
-
         print(
             f"step={step:04d} | "
             f"group={w_group:.3f} "
             f"goal={w_goal:.3f} "
             f"explore={w_explore:.3f} | "
-            f"rel_goal=({rel_goal_raw[0]:.3f}, {rel_goal_raw[1]:.3f}, {rel_goal_raw[2]:.3f}) | "
-            f"local_goal=({info.get('local_goal_x', np.nan):.3f}, "
-            f"{info.get('local_goal_y', np.nan):.3f}, "
-            f"{info.get('local_goal_z', np.nan):.3f}) | "
             f"goal_dist={info['goal_distance']:.3f} | "
             f"obs%={100.0 * info['observed_percentage']:.2f}"
         )
@@ -126,9 +107,6 @@ def main():
                 f"Goal:        {w_goal:.3f}\n"
                 f"Exploration: {w_explore:.3f}\n\n"
                 "Relative goal output\n"
-                f"dx:          {rel_goal_raw[0]:.3f}\n"
-                f"dy:          {rel_goal_raw[1]:.3f}\n"
-                f"dz:          {rel_goal_raw[2]:.3f}"
             )
 
         if info_text is not None:
@@ -142,9 +120,6 @@ def main():
                 f"Alignment:     {info['alignment']:.3f}\n"
                 f"Blocked frac:  {info['blocked_fraction']:.3f}\n"
                 f"Alive frac:    {info['alive_fraction']:.3f}\n"
-                f"Local goal x:  {info.get('local_goal_x', np.nan):.3f}\n"
-                f"Local goal y:  {info.get('local_goal_y', np.nan):.3f}\n"
-                f"Local goal z:  {info.get('local_goal_z', np.nan):.3f}\n"
                 f"Return:        {episode_return:.3f}"
             )
 
@@ -169,32 +144,6 @@ def main():
     plt.ylabel("Weight")
     plt.title("Evolution of blend weights")
     plt.ylim(0.0, 1.0)
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-    # Plot 2: raw relative goal outputs
-    plt.figure(figsize=(10, 5))
-    plt.plot(step_hist, rel_goal_x_hist, label="rel_goal_x_raw")
-    plt.plot(step_hist, rel_goal_y_hist, label="rel_goal_y_raw")
-    plt.plot(step_hist, rel_goal_z_hist, label="rel_goal_z_raw")
-    plt.xlabel("Step")
-    plt.ylabel("Raw network output")
-    plt.title("Evolution of relative goal outputs")
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-    # Plot 3: actual local goal used by env
-    plt.figure(figsize=(10, 5))
-    plt.plot(step_hist, local_goal_x_hist, label="local_goal_x")
-    plt.plot(step_hist, local_goal_y_hist, label="local_goal_y")
-    plt.plot(step_hist, local_goal_z_hist, label="local_goal_z")
-    plt.xlabel("Step")
-    plt.ylabel("Position")
-    plt.title("Evolution of local intermediate goal")
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
