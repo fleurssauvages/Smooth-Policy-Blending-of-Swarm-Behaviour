@@ -1051,7 +1051,7 @@ class FishGoalEnv(gym.Env):
                     facecolor=(0.6, 0.6, 0.6, 0.25),
                 )
                 self.ax.add_collection3d(self.mesh_poly)
-            self.ax.view_init(elev=20, azim=70)
+            self.ax.view_init(elev=20, azim=25)
             plt.ion()
             plt.show()
 
@@ -1637,6 +1637,7 @@ if __name__ == "__main__":
                         segr=8,
                         center=(20.0, 20.0, 20.0)
                     )
+                    
     goals = np.array([
         [40.0, 20.0, 20.0],
     ], dtype=np.float32)

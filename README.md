@@ -288,11 +288,6 @@ Core:
 Install:
   pip install numpy matplotlib torch gymnasium numba
 
-Optional:
-  - SpaceMouse (3Dconnexion device)
-  - corresponding driver
-
-
 ------------------------------------------------------------
 📊 Typical Usage
 ------------------------------------------------------------
