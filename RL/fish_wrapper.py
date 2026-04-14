@@ -17,6 +17,10 @@ class RewardConfig:
     success_bonus: float = 50.0
     progress_ref: float = 0.1
 
+    blend_smoothing_alpha: float = 0.0
+    w_blend_smooth: float = 1.0      
+
+
 class FishBlendEnv:
     """
     Blend-only PPO wrapper with 3 experts:
@@ -135,16 +139,17 @@ class FishBlendEnv:
 
         if layout_name == "test":
             walls = []
-            walls.append(make_torus_mesh(
-                R=6.0,
-                r=2.0,
-                center=(20.0, 20.0, 20.0),
-                segR=8,
-                segr=8,
+            walls.append(make_parallelepiped_mesh(
+                size=(1.0, 16.0, 16.0),
+                center=(20.0, 25.0, 15.0),
             ))
             walls.append(make_parallelepiped_mesh(
                 size=(1.0, 16.0, 16.0),
-                center=(30.0, 20.0, 20.0),
+                center=(10.0, 15.0, 25.0),
+            ))
+            walls.append(make_parallelepiped_mesh(
+                size=(1.0, 16.0, 16.0),
+                center=(30.0, 25.0, 20.0),
             ))
             verts, faces = merge_meshes(walls)
 
@@ -211,9 +216,20 @@ class FishBlendEnv:
         self.prev_weights = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
         return obs.astype(np.float32)
+
+    def _smooth_weights(self, target_weights: np.ndarray) -> np.ndarray:
+        alpha = float(self.reward_cfg.blend_smoothing_alpha)
+        alpha = np.clip(alpha, 1e-4, 1.0)
+
+        smoothed = (1.0 - alpha) * self.prev_weights + alpha * target_weights
+        smoothed = np.clip(smoothed, 1e-8, None)
+        smoothed = smoothed / np.sum(smoothed)
+        return smoothed.astype(np.float32)
     
     def step(self, action3: np.ndarray):
-        weights = self._decode_action(action3)
+        target_weights = self._decode_action(action3)
+        weights = self._smooth_weights(target_weights)
+        blend_delta = weights - self.prev_weights
 
         # Keep simulator goal fixed to the global goal
         self.env.update_goal(
@@ -247,7 +263,7 @@ class FishBlendEnv:
             prev_observed_percentage=self.prev_observed_percentage,
         )
 
-        reward = self._compute_reward(aux, positions_alive)
+        reward = self._compute_reward(aux, positions_alive, blend_delta=blend_delta)
         done, success, frac_goal = self._compute_done_success(positions_alive, alive)
 
         self.prev_goal_distance = aux["goal_distance"]
@@ -276,6 +292,7 @@ class FishBlendEnv:
         self,
         aux: dict,
         positions_alive: np.ndarray,
+        blend_delta: np.ndarray | None = None,
     ) -> float:
         cfg = self.reward_cfg
 
@@ -300,6 +317,11 @@ class FishBlendEnv:
             * (1.0 - observed_percentage)
         )
 
+        # Penalize large changes in blend weights to encourage smoother transitions
+        blend_smooth_penalty = 0.0
+        if blend_delta is not None:
+            blend_smooth_penalty = cfg.w_blend_smooth * float(np.sum(blend_delta ** 2))
+
         # Penalize time
         time_penalty = cfg.w_time
 
@@ -307,6 +329,7 @@ class FishBlendEnv:
         reward += goal_term
         reward += novelty_term
         reward -= time_penalty
+        reward -= blend_smooth_penalty
         reward += cfg.success_bonus * self._goal_fraction(positions_alive)
 
         return float(reward)

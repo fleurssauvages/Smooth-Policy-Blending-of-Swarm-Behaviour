@@ -30,10 +30,10 @@ def main():
     agent.net.eval()
 
     env = FishBlendEnv(
-        seed=123,
+        seed=10,
         do_animation=False,
         visit_grid_res=24,
-        layout_name="wall_16",
+        layout_name="test",
     )
 
     obs = env.reset(seed=123)
