@@ -39,6 +39,46 @@ Main challenge addressed:
   </tr>
 </table>
 
+<table>
+  <tr>
+    <td align="center">
+      <img src="images/grouped_roam.gif" width="400"/><br/>
+      Grouped Exploration Optimized Expert Tuning
+    </td>
+    <td align="center">
+      <img src="images/random_roam.gif" width="400"/><br/>
+      Maximum Exploration Optimized Expert Tuning
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="images/ppo_wall.gif" width="400"/><br/>
+      PPO Final Training: Large Wall
+    </td>
+    <td align="center">
+      <img src="images/ppo_wall2.gif" width="400"/><br/>
+      PPO Final Training: Large Wall Side View
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="images/ppo_test.gif" width="400"/><br/>
+      PPO Test: 3 Large Walls
+    </td>
+    <td align="center">
+      <img src="images/ppo_test2.gif" width="400"/><br/>
+      PPO Test: 3 Large Walls Side View
+    </td>
+  </tr>
+</table>
+
+
 
 ------------------------------------------------------------
 🧠 Main Ideas
