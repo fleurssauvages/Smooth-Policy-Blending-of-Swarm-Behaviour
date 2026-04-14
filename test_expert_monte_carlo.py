@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 
 from Env.env import FishGoalEnv, make_torus_mesh, make_sphere_mesh, merge_meshes
-from controllers.spacemouse import SpaceMouse3D
 from controllers.actionblender import ActionPolygonBlender
 
 if __name__ == "__main__":
@@ -58,11 +57,9 @@ if __name__ == "__main__":
     )
     env.reset(seed=0)
 
-    action_goal = pickle.load(open("save/goal_opt.pkl", "rb"))["best_theta"].astype(np.float32)
-    action_free_roam = pickle.load(open("save/free_roam.pkl", "rb"))["best_theta"].astype(np.float32)
-    action_aggressive = pickle.load(open("save/goal_aggressive.pkl", "rb"))["best_theta"].astype(np.float32)
-    action_cautious = pickle.load(open("save/goal_cautious.pkl", "rb"))["best_theta"].astype(np.float32)
-    action_exploratory = pickle.load(open("save/exploration.pkl", "rb"))["best_theta"].astype(np.float32)
+    action_goal = pickle.load(open("save/goal.pkl", "rb"))["best_theta"].astype(np.float32)
+    action_free_roam = pickle.load(open("save/grouped_roam.pkl", "rb"))["best_theta"].astype(np.float32)
+    action_exploratory = pickle.load(open("save/random_roam.pkl", "rb"))["best_theta"].astype(np.float32)
 
     action_presets = [
         action_free_roam,
@@ -90,19 +87,9 @@ if __name__ == "__main__":
         ax_rect=(0.0, 0.05, 0.36, 0.36),
     )
 
-    spm = SpaceMouse3D(trans_scale=150.0, deadzone=0.0, lowpass=0.0, rate_hz=200)
-    spm.start()
 
     try:
         while True:
-            trans, rot, buttons = spm.read()
-
-            v = np.array(trans, dtype=np.float32)
-            if np.sum(abs(v)) > 0.001:
-                goals[0] += v * env.dt
-                goals[0] = np.clip(goals[0], 0.0, env.bound)
-                env.update_goal(goals=goals)
-
             _ = env.step_rollout()
 
             if not plt.fignum_exists(env.fig.number):
@@ -112,5 +99,4 @@ if __name__ == "__main__":
             plt.pause(0.001)
 
     finally:
-        spm.stop()
         env.reset(seed=0)

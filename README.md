@@ -15,7 +15,6 @@ for a swarm of fish-like agents navigating in 3D environments.
 Two complementary control modes are supported:
 
 1) Interactive Control
-   - Real-time steering using a SpaceMouse
    - Expert blending via polygon UI
 
 2) Learned Control
@@ -24,7 +23,7 @@ Two complementary control modes are supported:
    - Optional learned intermediate goal (relative to swarm)
 
 Main challenge addressed:
-→ Navigation in obstacle-rich environments (e.g. walls, mazes)
+→ Navigation in obstacle-rich environments
 → Avoiding situations where the swarm gets stuck
 
 
@@ -49,9 +48,7 @@ The system combines three layers:
    - (Optional) obstacle-aware variants
 
 3) PPO Policy
-   Learns:
-   - How to blend experts
-   - Where to guide the swarm (intermediate goal)
+   Learns how to blend experts
 
 
 ------------------------------------------------------------
@@ -92,12 +89,10 @@ train_ppo_blend.py
 test_ppo_blend.py
   PPO evaluation + visualization
 
-test_expert_joystick.py
+test_expert_monte_carlo.py
   Interactive demo
 
 controllers/
-  spacemouse.py
-  keyboard.py
   actionblender.py
   utils.py
 
@@ -115,23 +110,21 @@ checkpoints/
 1) Interactive Expert Blending
 
 Run:
-  python test_expert_joystick.py
+  python test_expert_monte_carlo.py
 
 Features:
   - Polygon UI → barycentric expert blending
-  - SpaceMouse → control goal position
   - Real-time behavior mixing
 
 ---
 
-2) PPO-Based Control
+1) PPO-Based Control
 
 Run:
   python test_ppo_blend.py
 
 The PPO policy outputs:
   - Expert blending weights
-  - Intermediate goal (relative to swarm center)
 
 Goal:
   Reach the global target while adapting locally.
@@ -145,12 +138,9 @@ Stored in:
   save/
 
 Examples:
-  - free_roam.pkl
-  - goal_opt.pkl
-  - exploration.pkl
-  - obstacle_avoidance.pkl
-  - goal_cautious.pkl
-  - goal_aggressive.pkl
+  - goal.pkl
+  - random_exploration.pkl
+  - grouped_exploration.pkl
 
 Each expert is a parameter vector controlling:
   - separation
@@ -164,31 +154,20 @@ Each expert is a parameter vector controlling:
 Train new experts:
   python train_expert_monte_carlo.py
 
-
 ------------------------------------------------------------
 🤖 PPO Action Space
 ------------------------------------------------------------
 
 Action dimension: 6
 
-[a0, a1, a2, gx, gy, gz]
+[a0, a1, a2]
 
 First 3:
   → expert blending logits
   → softmax → weights
 
-Last 3:
-  → relative intermediate goal
-  → applied from swarm centroid
-
 The wrapper converts this into:
   - normalized weights
-  - bounded world-space goal
-
-Intermediate goal is:
-  ✓ smoothed over time
-  ✓ bounded in space
-  ✓ optionally biased toward global goal
 
 
 ------------------------------------------------------------
@@ -229,16 +208,16 @@ All features are normalized.
 🏋️ Training Workflow
 ------------------------------------------------------------
 
-1) Train experts
+1) Train "Experts"
    python train_expert_monte_carlo.py
 
-2) Train PPO
+2) Train PPO Blending
    python train_ppo_blend.py
 
-3) Evaluate PPO
+3) Evaluate PPO Blending
    python test_ppo_blend.py
 
-4) Interactive demo
+4) Interactive demo for manual blending
    python test_expert_joystick.py
 
 
@@ -272,7 +251,7 @@ Test PPO:
   python test_ppo_blend.py
 
 Interactive control:
-  python test_expert_joystick.py
+  python test_expert_monte_carlo.py
 
 ------------------------------------------------------------
 📄 License
