@@ -170,6 +170,113 @@ def build_avoid_field_from_df(df, power=1.0, alpha=4.0):
     return af
 
 @njit(cache=True, fastmath=True)
+def _axis_std(pos, alive):
+    n_alive = 0
+    cx = cy = cz = 0.0
+
+    for i in range(pos.shape[0]):
+        if alive[i]:
+            cx += pos[i, 0]
+            cy += pos[i, 1]
+            cz += pos[i, 2]
+            n_alive += 1
+
+    if n_alive == 0:
+        return 0.0, 0.0, 0.0, 0
+
+    cx /= n_alive
+    cy /= n_alive
+    cz /= n_alive
+
+    vx = vy = vz = 0.0
+    for i in range(pos.shape[0]):
+        if alive[i]:
+            dx = pos[i, 0] - cx
+            dy = pos[i, 1] - cy
+            dz = pos[i, 2] - cz
+            vx += dx * dx
+            vy += dy * dy
+            vz += dz * dz
+
+    vx /= n_alive
+    vy /= n_alive
+    vz /= n_alive
+
+    sx = math.sqrt(vx)
+    sy = math.sqrt(vy)
+    sz = math.sqrt(vz)
+
+    return sx, sy, sz, n_alive
+
+
+@njit(cache=True, fastmath=True)
+def compute_cohesion(pos, alive):
+    sx, sy, sz, n_alive = _axis_std(pos, alive)
+    if n_alive == 0:
+        return 0.0
+
+    eps = 1e-12
+
+    # overall compactness
+    mean_spread = (sx + sy + sz) / 3.0
+
+    # isotropy in [0, 1], equals 1 only if spreads are equal in x,y,z
+    isotropy = 3.0 * min(sx, sy, sz) / (sx + sy + sz + eps)
+
+    # compact and balanced swarm gets highest score
+    compactness = math.exp(-mean_spread / 40.0)
+
+    return compactness * isotropy
+
+
+@njit(cache=True, fastmath=True)
+def compute_dispersion(pos, alive):
+    sx, sy, sz, n_alive = _axis_std(pos, alive)
+    if n_alive == 0:
+        return 0.0
+
+    # geometric mean: high only if all 3 axes are occupied
+    return (sx * sy * sz) ** (1.0 / 3.0)
+
+
+@njit(cache=True, fastmath=True)
+def compute_alignment(vel, alive):
+    n_alive = 0
+    mx = my = mz = 0.0
+
+    # mean normalized direction
+    for i in range(vel.shape[0]):
+        if alive[i]:
+            vx = vel[i, 0]
+            vy = vel[i, 1]
+            vz = vel[i, 2]
+            vn = math.sqrt(vx * vx + vy * vy + vz * vz)
+            if vn > 1e-12:
+                mx += vx / vn
+                my += vy / vn
+                mz += vz / vn
+                n_alive += 1
+
+    if n_alive == 0:
+        return 0.0
+
+    mx /= n_alive
+    my /= n_alive
+    mz /= n_alive
+
+    # magnitude of mean direction = classical alignment strength
+    align_mag = math.sqrt(mx * mx + my * my + mz * mz)
+
+    # balance across x,y,z: one-axis dominance is penalized
+    ax = abs(mx)
+    ay = abs(my)
+    az = abs(mz)
+    eps = 1e-12
+    isotropy = 3.0 * min(ax, ay, az) / (ax + ay + az + eps)
+
+    return align_mag * isotropy
+
+@njit(cache=True, fastmath=True)
 def sample_avoid_field(af, px, py, pz, origin, spacing):
     R = af.shape[0]
 
@@ -250,7 +357,7 @@ def _cubic_interpolate(v0, v1, v2, v3, x):
 
 @njit(cache=True, fastmath=True)
 def _noise(time, cum_wavlen, rv0, rv1, rv2, rv3, seed_arr):
-    wavelen = 0.3
+    wavelen = 10.0
     if time >= cum_wavlen:
         # Wavelen segment
         cum_wavlen = cum_wavlen + wavelen
@@ -757,6 +864,9 @@ class FishGoalEnv(gym.Env):
         w_goal: float = 1.0,
         w_time: float = 0.2,
         w_div: float = 0.1,
+        w_coh: float = 0.1,
+        w_dis: float = 0.1,
+        w_ali: float = 0.1,
         # fixed sim params (you can override)
         rule_scalar: float = 1.0,
         rule_scalar_p: float = 1.0,
@@ -765,7 +875,7 @@ class FishGoalEnv(gym.Env):
         sep_r: float = 1.6,
         ali_r: float = 4.0,
         coh_r: float = 5.5,
-        rand_wavelen_scalar: float = 0.01,
+        rand_wavelen_scalar: float = 0.001,
         doAnimation: bool = False,
         returnTrajectory: bool = False,
         start =  np.array([6.0, 20.0, 20.0], dtype=np.float32),
@@ -828,6 +938,9 @@ class FishGoalEnv(gym.Env):
         self.w_goal = float(w_goal)
         self.w_time = float(w_time)
         self.w_div = float(w_div)
+        self.w_coh = float(w_coh)
+        self.w_dis = float(w_dis)
+        self.w_ali = float(w_ali)
 
         # Action: 9 scalars (sep, ali, coh, bnd, rand, obs_avoid, goal_gain, obs_gain)
         self.action_space = spaces.Box(low=0.0, high=10.0, shape=(9,), dtype=np.float32)
@@ -953,6 +1066,9 @@ class FishGoalEnv(gym.Env):
             raise RuntimeError("Call reset() before step().")
 
         metrics, info = self._rollout_episode(np.asarray(action, dtype=np.float32).reshape(-1))
+        cohesion = compute_cohesion(self._boid_pos, self._alive)
+        dispersion = compute_dispersion(self._boid_pos, self._alive)
+        alignment = compute_alignment(self._boid_vel, self._alive)
 
         time_pen = 0.0
         if not math.isnan(metrics.avg_time_to_goal):
@@ -962,6 +1078,9 @@ class FishGoalEnv(gym.Env):
             self.w_goal * metrics.frac_goal
             - self.w_time * time_pen
             + self.w_div * metrics.diversity_entropy
+            + self.w_coh * cohesion
+            + self.w_dis * dispersion
+            + self.w_ali * alignment
         )
 
         info.update({
@@ -1093,7 +1212,8 @@ class FishGoalEnv(gym.Env):
             "reached_count": self.boid_count - n_active,
             "steps_executed": step + 1 if self.max_steps > 0 else 0,
         }
-
+        self._boid_pos = boid_pos
+        self._boid_vel = boid_vel
         if self.returnTrajectory:
             info["trajectory_boid_pos"] = self.trajectory_boid_pos
             info["trajectory_boid_vel"] = self.trajectory_boid_vel

@@ -27,15 +27,17 @@ def main():
     dt = 1.0
 
     # --- Monte Carlo Parameters ---
-    iters = 20
+    iters = 5
     samples_per_iter = 50
     eval_episodes = 2
     elite_frac = 0.2
     seed0 = 0
 
     # Reward weights
-    w_goal, w_time, w_diversity = -10.0, 0.5, 10.0
-    name = "exploration"
+    w_goal, w_time, w_diversity, w_coh, w_dis, w_ali = -3.0, 0.0, 0.0, 10.0, 0.0, 5.0 # Grouped Roam
+    w_goal, w_time, w_diversity, w_coh, w_dis, w_ali = 0.0, 0.0, 0.0, 0.0, 10.0, 0.0 # Random Exploration
+    w_goal, w_time, w_diversity, w_coh, w_dis, w_ali = 10.0, 0.5, 3.0, 0.0, 0.0, 0.0 # Goal-reaching
+    name = "goal"
 
     # Initial parameter center
     theta0 = np.array([
@@ -90,6 +92,9 @@ def main():
         w_goal=w_goal,
         w_time=w_time,
         w_div=w_diversity,
+        w_coh=w_coh,
+        w_dis=w_dis,
+        w_ali=w_ali,
     )
 
     # Search state
@@ -162,6 +167,21 @@ def main():
         open("save/"+name+".pkl", "wb")
     )
 
+    env = FishGoalEnv(
+        boid_count=boid_count,
+        max_steps=max_steps,
+        dt=dt,
+        verts=verts,
+        faces=faces,
+        goals=goals,
+        goal_W=goal_W,
+        w_goal=w_goal,
+        w_time=w_time,
+        w_div=w_diversity,
+        doAnimation=True,
+    )
+    env.reset(seed=0)
+    obs, reward, terminated, truncated, info = env.step(best_theta)
 
 if __name__ == "__main__":
     main()

@@ -236,12 +236,14 @@ def run_stage(
             stats = agent.update(batch_flat)
 
             mean_return = float(np.mean(finished_returns)) if finished_returns else float("nan")
-            mean_len = float(np.mean(finished_lengths)) if finished_lengths else float("nan")
+            if finished_lengths:
+                mean_len = float(np.mean(finished_lengths))
+                recent_mean_lengths.append(mean_len)
+            else:
+                mean_len = float("nan")
             success_rate = float(np.mean(finished_successes)) if finished_successes else 0.0
 
             recent_success_rates.append(success_rate)
-            recent_mean_lengths.append(mean_len)
-
             success_rate_window = float(np.mean(recent_success_rates))
             length_window = float(np.mean(recent_mean_lengths))
 
@@ -251,15 +253,15 @@ def run_stage(
             print(
                 f"[{stage_name:>8} | update {update:04d}] "
                 f"episodes={len(finished_returns):3d} "
-                f"mean_return={mean_return:8.3f} "
+                # f"mean_return={mean_return:8.3f} "
                 f"mean_len={mean_len:6.1f} "
                 f"success_rate={success_rate:6.3f} "
-                f"success_win={success_rate_window:6.3f} "
-                f"len_win={length_window:6.1f} "
-                f"policy_loss={stats['policy_loss']:.4f} "
-                f"value_loss={stats['value_loss']:.4f} "
-                f"entropy={stats['entropy']:.4f} "
-                f"approx_kl={stats['approx_kl']:.6f}"
+                # f"success_win={success_rate_window:6.3f} "
+                # f"len_win={length_window:6.1f} "
+                # f"policy_loss={stats['policy_loss']:.4f} "
+                # f"value_loss={stats['value_loss']:.4f} "
+                # f"entropy={stats['entropy']:.4f} "
+                # f"approx_kl={stats['approx_kl']:.6f}"
             )
 
             if update % save_every == 0:
@@ -308,17 +310,18 @@ def main():
     act_dim = 3
 
     stages = [
-        ("wall_2", 20, 0.90, 105.0),
+        ("no_wall", 200, 0.95, 105.0),
+        ("wall_2", 50, 0.90, 105.0),
         ("wall_4", 50, 0.85, 180.0),
-        ("wall_8", 50, 0.75, 200.0),
-        ("wall_12", 100, 0.65, 300.0),
-        ("wall_16", 100, 0.65, 350.0),
+        ("wall_8", 100, 0.75, 200.0),
+        ("wall_12", 200, 0.65, 300.0),
+        ("wall_16", 300, 0.65, 350.0),
     ]
 
     num_envs = 8
-    rollout_steps = 256   # 8 * 256 = 2048 samples per update
+    rollout_steps = 128   # 8 * 256 = 2048 samples per update
     save_every = 25
-    success_window = 5
+    success_window = 15
 
     agent = PPOAgent(
         PPOConfig(
@@ -328,9 +331,9 @@ def main():
             lr=3e-4,
             gamma=0.99,
             gae_lambda=0.95,
-            clip_coef=0.2,
-            ent_coef=0.01,
-            vf_coef=0.5,
+            clip_coef=0.15,
+            ent_coef=0.005,
+            vf_coef=0.7,
             max_grad_norm=0.5,
             update_epochs=10,
             minibatch_size=256,

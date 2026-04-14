@@ -5,17 +5,20 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from Env.env import FishGoalEnv, make_parallelepiped_mesh, merge_meshes
+from Env.env import FishGoalEnv, make_parallelepiped_mesh, make_torus_mesh, merge_meshes
 from RL.swarm_features import update_visited_grid, extract_features
 
 
 @dataclass
 class RewardConfig:
-    w_goal_progress: float = 2.0
-    w_novelty: float = 1000.0
-    w_time: float = 0.01
+    w_goal_progress: float = 1.0
+    w_novelty: float = 0.5
+    w_time: float = 0.1
     success_bonus: float = 50.0
-    progress_ref: float = 0.01
+    progress_ref: float = 0.1
+
+    blend_smoothing_alpha: float = 0.0
+    w_blend_smooth: float = 1.0      
 
 
 class FishBlendEnv:
@@ -29,6 +32,7 @@ class FishBlendEnv:
       3 logits -> softmax -> [group_weight, goal_weight, explore_weight]
 
     Scenarios:
+      - no wall
       - wall_2
       - wall_4
       - wall_8
@@ -54,17 +58,16 @@ class FishBlendEnv:
 
         starts = np.array(
             [
-                [5.0, 17.0, 20.0],
-                [5.0, 23.0, 20.0],
+                [2.0, 20.0, 20.0],
             ],
             dtype=np.float32,
         )
-        goals = np.array([[34.0, 20.0, 20.0]], dtype=np.float32)
+        goals = np.array([[38.0, 20.0, 20.0]], dtype=np.float32)
         goal_W = np.array([[0.0]], dtype=np.float32)
 
         self.env = FishGoalEnv(
             boid_count=600,
-            max_steps=2000,
+            max_steps=600,
             dt=1.0,
             doAnimation=do_animation,
             returnTrajectory=False,
@@ -77,9 +80,9 @@ class FishBlendEnv:
         )
 
         # Group + goal + exploration experts
-        self.action_group = pickle.load(open("save/free_roam.pkl", "rb"))["best_theta"].astype(np.float32)
-        self.action_goal = pickle.load(open("save/goal_opt.pkl", "rb"))["best_theta"].astype(np.float32)
-        self.action_explore = pickle.load(open("save/exploration.pkl", "rb"))["best_theta"].astype(np.float32)
+        self.action_group = pickle.load(open("save/grouped_roam.pkl", "rb"))["best_theta"].astype(np.float32)
+        self.action_goal = pickle.load(open("save/goal.pkl", "rb"))["best_theta"].astype(np.float32)
+        self.action_explore = pickle.load(open("save/random_roam.pkl", "rb"))["best_theta"].astype(np.float32)
 
         self.expert_actions = np.stack(
             [self.action_group, self.action_goal, self.action_explore],
@@ -99,6 +102,7 @@ class FishBlendEnv:
         self.prev_goal_distance = None
         self.prev_observed_percentage = None
         self.step_count = 0
+        self.prev_weights = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
     def _build_layout(self, layout_name: str):
         """
@@ -106,11 +110,13 @@ class FishBlendEnv:
         Side lengths increase with scenario difficulty.
         """
         size_map = {
+            "no_wall": 0.0,
             "wall_2": 2.0,
             "wall_4": 4.0,
             "wall_8": 8.0,
             "wall_12": 12.0,
             "wall_16": 16.0,
+            "test": 16.0,
         }
 
         if layout_name not in size_map:
@@ -121,12 +127,31 @@ class FishBlendEnv:
 
         side = size_map[layout_name]
 
+        if side == 0.0:
+            return None, None
+
         wall = make_parallelepiped_mesh(
             size=(1.0, side, side),
             center=(20.0, 20.0, 20.0),
         )
 
         verts, faces = merge_meshes([wall])
+
+        if layout_name == "test":
+            walls = []
+            walls.append(make_torus_mesh(
+                R=6.0,
+                r=2.0,
+                center=(20.0, 20.0, 20.0),
+                segR=8,
+                segr=8,
+            ))
+            walls.append(make_parallelepiped_mesh(
+                size=(1.0, 16.0, 16.0),
+                center=(30.0, 20.0, 20.0),
+            ))
+            verts, faces = merge_meshes(walls)
+
         return verts, faces
 
     def _get_rollout_arrays(self):
@@ -187,11 +212,23 @@ class FishBlendEnv:
 
         self.prev_goal_distance = aux["goal_distance"]
         self.prev_observed_percentage = aux["observed_percentage"]
+        self.prev_weights = np.array([1.0, 0.0, 0.0], dtype=np.float32)
 
         return obs.astype(np.float32)
 
+    def _smooth_weights(self, target_weights: np.ndarray) -> np.ndarray:
+        alpha = float(self.reward_cfg.blend_smoothing_alpha)
+        alpha = np.clip(alpha, 1e-4, 1.0)
+
+        smoothed = (1.0 - alpha) * self.prev_weights + alpha * target_weights
+        smoothed = np.clip(smoothed, 1e-8, None)
+        smoothed = smoothed / np.sum(smoothed)
+        return smoothed.astype(np.float32)
+    
     def step(self, action3: np.ndarray):
-        weights = self._decode_action(action3)
+        target_weights = self._decode_action(action3)
+        weights = self._smooth_weights(target_weights)
+        blend_delta = weights - self.prev_weights
 
         # Keep simulator goal fixed to the global goal
         self.env.update_goal(
@@ -225,8 +262,8 @@ class FishBlendEnv:
             prev_observed_percentage=self.prev_observed_percentage,
         )
 
-        reward = self._compute_reward(aux, positions_alive)
-        done, success = self._compute_done_success(positions_alive, alive)
+        reward = self._compute_reward(aux, positions_alive, blend_delta=blend_delta)
+        done, success, frac_goal = self._compute_done_success(positions_alive, alive)
 
         self.prev_goal_distance = aux["goal_distance"]
         self.prev_observed_percentage = aux["observed_percentage"]
@@ -245,13 +282,16 @@ class FishBlendEnv:
             "weight_group": float(weights[0]),
             "weight_goal": float(weights[1]),
             "weight_explore": float(weights[2]),
+            "frac_goal": float(frac_goal),
         }
+        self.prev_weights = weights.copy()
         return obs.astype(np.float32), reward, done, info
 
     def _compute_reward(
         self,
         aux: dict,
         positions_alive: np.ndarray,
+        blend_delta: np.ndarray | None = None,
     ) -> float:
         cfg = self.reward_cfg
 
@@ -276,6 +316,11 @@ class FishBlendEnv:
             * (1.0 - observed_percentage)
         )
 
+        # Penalize large changes in blend weights to encourage smoother transitions
+        blend_smooth_penalty = 0.0
+        if blend_delta is not None:
+            blend_smooth_penalty = cfg.w_blend_smooth * float(np.sum(blend_delta ** 2))
+
         # Penalize time
         time_penalty = cfg.w_time
 
@@ -283,25 +328,24 @@ class FishBlendEnv:
         reward += goal_term
         reward += novelty_term
         reward -= time_penalty
-
-        if self._goal_reached(positions_alive):
-            reward += cfg.success_bonus
+        reward -= blend_smooth_penalty
+        reward += cfg.success_bonus * self._goal_fraction(positions_alive)
 
         return float(reward)
 
-    def _goal_reached(self, positions_alive: np.ndarray) -> bool:
+    def _goal_fraction(self, positions_alive: np.ndarray) -> float:
         if positions_alive.shape[0] == 0:
-            return False
+            return 0.0
 
         goal_radius = float(getattr(self.env, "goal_radius", 4.0))
         dists = np.linalg.norm(positions_alive - self.goal[None, :], axis=1)
-        frac_in_goal = float(np.mean(dists <= goal_radius))
-
-        return bool(frac_in_goal >= 0.8)
-
+        return float(np.mean(dists <= goal_radius))
+    
     def _compute_done_success(self, positions_alive: np.ndarray, alive: np.ndarray):
-        success = self._goal_reached(positions_alive)
+        frac_goal = self._goal_fraction(positions_alive)
         timeout = self.step_count >= self.max_steps
         everyone_dead = not np.any(alive)
+
+        success = frac_goal > 0.5
         done = success or timeout or everyone_dead
-        return bool(done), bool(success)
+        return bool(done), bool(success), float(frac_goal)

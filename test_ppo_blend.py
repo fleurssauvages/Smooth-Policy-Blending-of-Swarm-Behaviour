@@ -15,7 +15,7 @@ def softmax_np(x: np.ndarray) -> np.ndarray:
 
 def main():
     checkpoint_path = "checkpoints/ppo_blend_final.pt"
-    max_eval_steps = 1200
+    max_eval_steps = 600
     sleep_s = 0.001
 
     agent = PPOAgent(
@@ -31,7 +31,7 @@ def main():
 
     env = FishBlendEnv(
         seed=123,
-        do_animation=True,
+        do_animation=False,
         visit_grid_res=24,
         layout_name="wall_16",
     )
