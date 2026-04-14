@@ -31,7 +31,8 @@ def main():
 
     env = FishBlendEnv(
         seed=10,
-        do_animation=False,
+        do_animation=True,
+        save_animation=False,
         visit_grid_res=24,
         layout_name="test",
     )

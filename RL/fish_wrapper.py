@@ -47,6 +47,7 @@ class FishBlendEnv:
         visit_grid_res: int = 24,
         reward_cfg: RewardConfig | None = None,
         layout_name: str = "wall_2",
+        save_animation: bool = False,
     ):
         self.seed = seed
         self.layout_name = layout_name
@@ -70,6 +71,7 @@ class FishBlendEnv:
             max_steps=600,
             dt=1.0,
             doAnimation=do_animation,
+            saveAnimation=save_animation,
             returnTrajectory=False,
             verts=verts,
             faces=faces,

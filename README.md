@@ -26,6 +26,19 @@ Main challenge addressed:
 → Navigation in obstacle-rich environments
 → Avoiding situations where the swarm gets stuck
 
+<table>
+  <tr>
+    <td align="center">
+      <img src="images/manual.gif" width="400"/><br/>
+      Manual Parameter Tuning
+    </td>
+    <td align="center">
+      <img src="images/goal.gif" width="400"/><br/>
+      Goal Optimized Expert Tuning
+    </td>
+  </tr>
+</table>
+
 
 ------------------------------------------------------------
 🧠 Main Ideas

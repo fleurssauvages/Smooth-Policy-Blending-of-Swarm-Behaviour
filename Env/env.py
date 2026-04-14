@@ -878,6 +878,7 @@ class FishGoalEnv(gym.Env):
         rand_wavelen_scalar: float = 0.001,
         doAnimation: bool = False,
         returnTrajectory: bool = False,
+        saveAnimation: bool = False,
         start =  np.array([6.0, 20.0, 20.0], dtype=np.float32),
         goal =  np.array([34.0, 20.0, 20.0], dtype=np.float32),
         starts = None,
@@ -978,6 +979,7 @@ class FishGoalEnv(gym.Env):
             self.mesh_spacing = None
 
         self.doAnimation = doAnimation
+        self.saveAnimation = saveAnimation
         self.returnTrajectory = returnTrajectory
         if self.returnTrajectory:
             self.trajectory_boid_pos = np.empty((self.max_steps, self.boid_count, 3), dtype=np.float32)
@@ -1049,9 +1051,15 @@ class FishGoalEnv(gym.Env):
                     facecolor=(0.6, 0.6, 0.6, 0.25),
                 )
                 self.ax.add_collection3d(self.mesh_poly)
-            self.ax.view_init(elev=20, azim=25)
+            self.ax.view_init(elev=20, azim=70)
             plt.ion()
             plt.show()
+
+            if self.saveAnimation:
+                import os, glob
+                for f in glob.glob("frames/frame_*.png"):
+                    os.remove(f)
+                plt.savefig(f"frames/frame_{0:04d}.png") 
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -1191,6 +1199,8 @@ class FishGoalEnv(gym.Env):
                 self.boid_scatter._offsets3d = (boid_pos[:, 0], boid_pos[:, 1], boid_pos[:, 2])
                 plt.draw()
                 plt.pause(0.001)
+                if self.saveAnimation:
+                    plt.savefig(f"frames/frame_{step:04d}.png") 
 
             if self.returnTrajectory:
                 self.trajectory_boid_pos[step, :, :] = boid_pos
@@ -1394,6 +1404,8 @@ class FishGoalEnv(gym.Env):
             )
             plt.draw()
             plt.pause(0.001)
+            if self.saveAnimation:
+                plt.savefig(f"frames/frame_{step:04d}.png")
 
         if self.returnTrajectory:
             self.trajectory_boid_pos[step, :, :] = self.boid_pos
@@ -1619,27 +1631,21 @@ def merge_meshes(meshes):
 
 if __name__ == "__main__":
     verts, faces = make_torus_mesh(
-                        R=3.0,
-                        r=1.0,
-                        segR=12,
-                        segr=12,
+                        R=4.0,
+                        r=2.0,
+                        segR=8,
+                        segr=8,
                         center=(20.0, 20.0, 20.0)
                     )
     goals = np.array([
-        [34.0, 20.0, 20.0],  # 0 - initial
-        [40.0, 20.0, 20.0],  # 1
-        [40.0, 30.0, 20.0],  # 2
-        [40.0, 10.0, 20.0],  # 3
+        [40.0, 20.0, 20.0],
     ], dtype=np.float32)
     goal_W = np.array([
-        [0.0, 2.0, 1.0, 1.0],  # from 0 → {1,2,3}
-        [0.0, 1.0, 0.0, 0.0],  # from 1 → 0
-        [0.0, 0.0, 1.0, 0.0],  # from 2 → 0
-        [0.0, 0.0, 0.0, 1.0],  # from 3 → 0
+        [1.0], 
     ], dtype=np.float32)
 
     t0 = time.time()
-    env = FishGoalEnv(boid_count=600, max_steps=500, dt=1, doAnimation = True, returnTrajectory = False, verts=verts, faces=faces, goals=goals, goal_W=goal_W)
+    env = FishGoalEnv(boid_count=600, max_steps=1000, dt=1, doAnimation = True, saveAnimation=False, verts=verts, faces=faces, goals=goals, goal_W=goal_W)
     t1 = time.time()
     print("Time to make env:", t1 - t0)
     
@@ -1669,14 +1675,8 @@ if __name__ == "__main__":
     
     load_theta = True
     if load_theta:
-        theta_path = "save/best_policy.pkl"
+        theta_path = "save/goal.pkl"
         action = pickle.load(open(theta_path, "rb"))['best_theta']
-    
-    t = []
-    for _ in range(10):
-        t0 = time.time()
-        obs, reward, terminated, truncated, info = env.step(action)
-        env.reset(seed=0)
-        t1 = time.time()
-        t.append(t1 - t0)
-    print(f"Median step time: {np.median(t)*1000.0:.2f} ms")
+
+    obs, reward, terminated, truncated, info = env.step(action)
+    env.reset(seed=0)
