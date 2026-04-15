@@ -1,7 +1,6 @@
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
 
 from Env.env import FishGoalEnv, make_torus_mesh, make_sphere_mesh, merge_meshes
 from controllers.actionblender import ActionPolygonBlender
